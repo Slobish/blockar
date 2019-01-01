@@ -2,15 +2,21 @@ pragma solidity ^0.5.0;
 
 import "./Ownable.sol";
 import "./Election.sol";
+import "./SafeMath.sol";
 
 /*
 *   Authored by Franco Scucchiero
 */
 
+
 contract ElectionPool is Ownable {
-    
+
+    using SafeMath for int256;
+
     struct ElectionRegistration {
         bool registered;
+        bool voted;
+        bool done_action;
         bool accepted;
         Election election_contract;
         uint256 registered_timestamp;
@@ -21,16 +27,16 @@ contract ElectionPool is Ownable {
         bool isRegistered;
         address moderatorAddress;
         uint256 timestampRegistration;
-        uint8 weight;
+        uint256 weight;
         uint256 index;
     }
 
     struct Votes {
-        uint16 balance;
-        uint16 votes;
+        int256 balance;
+        uint256 votes;
     }
 
-    mapping (bytes32 => mapping (address => int8)) public moderators_votes;
+    mapping (bytes32 => Votes) public moderators_votes;
     mapping (bytes32 => ElectionRegistration) public registered_elections;
     mapping (address => Moderator) public moderators;
     
@@ -45,8 +51,10 @@ contract ElectionPool is Ownable {
         for(int i = 0; i < initial_moderators.length; i++) {
             uint256 current_index = iterable_moderators.push(initial_moderators).sub(1);
             Moderator memory newModerator = Moderator({
+                isRegistered : true,
                 moderatorAddress: initial_moderators[i],
                 timestampRegistration: now,
+                weight: 1,
                 index: current_index
             });
             moderators[initial_moderators[i]] = newModerator;
@@ -55,7 +63,13 @@ contract ElectionPool is Ownable {
         required_confirmations = initial_required_confirmations;
     }
     
-    
+    function() external payable {
+        fallback();
+    }
+
+    function fallback() internal onlyAllowedActors{
+
+    }
     /*
     *   Duration in seconds
     */
@@ -82,9 +96,27 @@ contract ElectionPool is Ownable {
     */
     function voteElection(string election_reason, int8 vote) public onlyModerators {
         require(vote == 1 || vote == -1, "Only 1 or -1 are allowed");
-        require(iterable_elections[keccak256(election_reason)] != 0, "Election doesn't exists");
-        moderators_votes[keccak256(election_reason)] = vote;
+        bytes32 reason_hash = keccak256(election_reason);
+        require(iterable_elections[reason_hash] != 0, "Election doesn't exists");
+        
+        current_balance = moderators_votes[reason_hash].balance;
+        current_votes = moderators_votes[reason_hash].votes;
+        moderators_votes[reason_hash].balance = current_balance - moderators[msg.sender].weight * vote;
+        moderators_votes[reason_hash].votes = current_votes + 1;
 
+        if(moderators_votes[reason_hash].votes >= required_confirmations){
+            registered_elections[reason_hash].voted = true
+            if(moderators_votes[reason_hash].balance > 0){
+                registered_elections[reason_hash].accepted = true
+                /*TODO: call fallback adn make actions.. */
+            }
+            else{
+                registered_elections[reason_hash].accepted = false
+            }
+        }
+
+            
+        
     }
 
     modifier onlyModerators() {
