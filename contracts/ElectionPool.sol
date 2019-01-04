@@ -104,23 +104,22 @@ contract ElectionPool is Ownable {
         moderators_votes[reason_hash].balance = current_balance - moderators[msg.sender].weight * vote;
         moderators_votes[reason_hash].votes = current_votes + 1;
 
-        if(moderators_votes[reason_hash].votes >= required_confirmations){
-            registered_elections[reason_hash].voted = true
-            if(moderators_votes[reason_hash].balance > 0){
-                registered_elections[reason_hash].accepted = true
-                /*TODO: call fallback adn make actions.. */
+        if(moderators_votes[reason_hash].votes >= required_confirmations) {
+            registered_elections[reason_hash].voted = true;
+
+            if(moderators_votes[reason_hash].balance > 0) {
+                registered_elections[reason_hash].accepted = true;
+                registered_elections[reason_hash].Election.fallback();
             }
             else{
-                registered_elections[reason_hash].accepted = false
+                registered_elections[reason_hash].accepted = false;
             }
         }
-
-            
-        
     }
 
     modifier onlyModerators() {
         require(moderators[msg.sender], "You are not registered as a moderator");
         _;
     }
+    
 }
