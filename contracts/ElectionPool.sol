@@ -9,7 +9,7 @@ import "./SafeMath.sol";
 */
 
 
-contract ElectionPool is Ownable {
+contract ElectionPool {
 
     using SafeMath for int256;
 
@@ -39,10 +39,11 @@ contract ElectionPool is Ownable {
     mapping (bytes32 => Votes) public moderators_votes;
     mapping (bytes32 => ElectionRegistration) public registered_elections;
     mapping (address => Moderator) public moderators;
-    
-    bytes32[] iterable_elections;
-    address[] iterable_moderators;
-    uint8 required_confirmations = 0;
+    mapping (address => bool) public padron;
+
+    bytes32[] public iterable_elections;
+    address[] public iterable_moderators;
+    uint8 public required_confirmations = 0;
 
     constructor(address[] initial_moderators, uint8 initial_required_confirmations) public {
         require (len(initial_moderators) > 0, "There must be at least 1 initial moderator.");
@@ -51,7 +52,7 @@ contract ElectionPool is Ownable {
         for(int i = 0; i < initial_moderators.length; i++) {
             uint256 current_index = iterable_moderators.push(initial_moderators).sub(1);
             Moderator memory newModerator = Moderator({
-                isRegistered : true,
+                isRegistered: true,
                 moderatorAddress: initial_moderators[i],
                 timestampRegistration: now,
                 weight: 1,
@@ -62,13 +63,29 @@ contract ElectionPool is Ownable {
 
         required_confirmations = initial_required_confirmations;
     }
-    
-    function() external payable {
-        fallback();
+
+    function addModerator(address _newModerator) public onlyPower {
+        uint256 current_index = iterable_moderators.push(_newModerator).sub(1);
+        Moderator memory newModerator = Moderator({
+            isRegistered: true,
+            moderatorAddress: _newModerator,
+            timestampRegistration: now,
+            weight: 1,
+            index: current_index
+        });
+        moderators[_newModerator] = newModerator;
     }
 
-    function fallback() internal onlyAllowedActors{
+    function removeModerator(address punishedModerator) public onlyPower {
+        require (moderators[punishedModerator].registered, "Address is not a registered moderator");
+        // CHECK IF IT IS ENOUGH
+        uint256 index = moderators[punishedModerator].index;
+        delete iterable_moderators[index];
+        moderators[punishedModerator].registered = false;
+    }
 
+    function changeRequiredConfirmations(uint256 newRequired) public {
+        requiredConfirmations = newRequired;
     }
     /*
     *   Duration in seconds
@@ -117,9 +134,40 @@ contract ElectionPool is Ownable {
         }
     }
 
+    function addPadron(address[] allowed) public onlySomeone{
+        for(int i=0; i < allowed.length; i++){
+            padron[allowed[i]] = true;
+        }
+    }
+
+    function isAllowedToVote(address _address) public returns (bool){
+        return padron[_address];
+    }
+
+    function getElectionsAmount() public view {
+        return iterable_elections.length;
+    }
+
+    function getElectionByIndex(uint256 index) public view returns(Election) {
+        return iterable_elections[index];
+    }
+
     modifier onlyModerators() {
         require(moderators[msg.sender], "You are not registered as a moderator");
         _;
     }
-    
+
+    modifier onlyPower() {
+        require(registered_elections[msg.sender].registered == true, "The election is not registered yet");
+        require(registered_elections[msg.sender].voted == true, "The election is not voted yet");
+        require(registered_elections[msg.sender].accepted == true, "The election is not accepted yet");
+        require(registered_elections[msg.sender].done_action == false, "The election already acted");
+        _;
+    }
+
+    // Decide the criteria to allow someone to vote
+    modifier onlySomeone(){
+        _;
+    }    
+
 }
